@@ -1,0 +1,477 @@
+---
+title: "Homework 2"
+author: "PSTAT 131/231, Winter 2019"
+date: "__Due on  Sunday February 10, 2019 at 11:59 pm__"
+graphics: yes
+geometry: margin=0.75in
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, 
+                      cache=FALSE, 
+                      fig.width=5, 
+                      fig.height=5,
+                      fig.align='center')
+indent1 = '    '      
+indent2 = paste(rep(indent1, 2), collapse='')
+```
+
+----------------------
+
+# Spam detection with `spambase` dataset
+
+Following packages are needed below:
+```{r pkg, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tree)
+library(plyr)
+library(class)
+library(rpart)
+library(maptree)
+library(ROCR)
+library(randomForest)
+library(kableExtra)
+library(stargazer)
+
+```
+
+__Data Info__: The Data Set was obtained by the UCI Machine Learning database. From the website, 
+        
+> The "spam" concept is diverse: advertisements for products/web sites, make
+> money fast schemes, chain letters, pornography... 
+> 
+> Our collection of spam e-mails came from our postmaster and individuals who had
+> filed spam. Our collection of non-spam e-mails came from filed work and
+> personal e-mails, and hence the word 'george' and the area code '650' are
+> indicators of non-spam. These are useful when constructing a personalized spam
+> filter. One would either have to blind such non-spam indicators or get a very
+> wide collection of non-spam to generate a general purpose spam filter.
+   
+Dataset `spambase.tab` can be read with the following code. Next, standardize
+each numerical attribute in the dataset. Each standardized column should have
+zero mean and unit variance. 
+
+```{r, warning=FALSE, results='hide', message=FALSE}
+spam <- read_table2("spambase.tab", guess_max=2000)
+spam <- spam %>% 
+    mutate(y = factor(y, levels=c(0,1), labels=c("good", "spam"))) %>%   # label as factors
+    mutate_at(.vars=vars(-y), .funs=scale)                               # scale others
+```
+
+__Attribute Information__: The last column of 'spambase.tab' denotes whether
+the e-mail was considered spam (1) or not (0), i.e. unsolicited commercial
+e-mail. Most of the attributes indicate whether a particular word or character
+was frequently occurring in the e-mail. The run-length attributes (55-57)
+measure the length of sequences of consecutive capital letters. For the
+statistical measures of each attribute, see the end of this file. Here are the
+definitions of the attributes: 
+
+* 48 continuous real [0,100] attributes of type `word_freq_WORD` = percentage
+  of words in the e-mail that match `WORD`, i.e. 100 * (number of times the
+  `WORD` appears in the e-mail) / total number of words in e-mail. A `WORD` in
+  this case is any string of alphanumeric characters bounded by
+  non-alphanumeric characters or end-of-string. 
+
+* 6 continuous real [0,100] attributes of type `char_freq_CHAR` = percentage of
+  characters in the e-mail that match `CHAR`, i.e. 100 * (number of `CHAR`
+  occurrences) / total characters in e-mail 
+
+* 1 continuous real [1,...] attribute of type `capital_run_length_average` =
+  average length of uninterrupted sequences of capital letters 
+
+* 1 continuous integer [1,...] attribute of type `capital_run_length_longest` =
+  length of longest uninterrupted sequence of capital letters 
+
+* 1 continuous integer [1,...] attribute of type `capital_run_length_total` =
+  sum of length of uninterrupted sequences of capital letters = total number of
+  capital letters in the e-mail 
+
+* 1 nominal {0,1} class attribute of type `spam` = denotes whether the e-mail was
+  considered spam (1) or not (0), i.e. unsolicited commercial e-mail. 
+
+**Classification Task**: We will build models to classify emails into good vs.
+spam. 
+
+In this dataset, we will apply several classification methods and compare their
+training error rates and test error rates. We define a new function, named
+`calc_error_rate()`, that will calculate misclassification error rate. Any error in this
+homework (unless specified otherwise) imply misclassification error.
+
+```{r ter}
+calc_error_rate <- function(predicted.value, true.value){
+  return(mean(true.value!=predicted.value))
+}
+```
+
+Throughout this homework, we will calculate the error rates to measure and
+compare classification performance. To keep track of error rates of all
+methods, we will create a matrix called `records`: 
+```{r record}
+records = matrix(NA, nrow=3, ncol=2)
+colnames(records) <- c("train.error","test.error")
+rownames(records) <- c("knn","tree","logistic")
+```
+
+**Training/test sets**: Split randomly the data set in a train and a test
+set:
+```{r, results="hide"}
+set.seed(1)
+test.indices = sample(1:nrow(spam), 1000)
+spam.train=spam[-test.indices,]
+spam.test=spam[test.indices,]
+```
+
+
+
+**$10$-fold cross-validation**: Using `spam.train` data, 10-fold cross
+validation will be performed throughout this homework. In order to ensure data
+partitioning is consistent, define `folds` which contain fold assignment for
+each observation in `spam.train`.
+
+```{r, folds-definition}
+nfold = 10
+set.seed(1)
+folds = seq.int(nrow(spam.train)) %>%       ## sequential obs ids
+    cut(breaks = nfold, labels=FALSE) %>%   ## sequential fold ids
+    sample                                  ## random fold ids
+```
+
+----------------------
+
+
+## K-Nearest Neighbor Method
+
+1. **(Selecting number of neighbors)** Use 10-fold cross validation to select
+   the best number of neighbors `best.kfold` out of six values of $k$ in `kvec = c(1, seq(10, 50, length.out=5))`. Use the folds defined above and use the following `do.chunk` definition in your code. Again put `set.seed(1)` before your code.  What value of $k$ leads to the smallest estimated test error?
+
+```{r 90,indent=indent1,message=F,warning=F}
+do.chunk <- function(chunkid, folddef, Xdat, Ydat, k){
+  
+  train = (folddef!=chunkid)
+  
+  Xtr = Xdat[train,]
+  Ytr = Ydat[train]
+  
+  Xvl = Xdat[!train,]
+  Yvl = Ydat[!train]
+
+  ## get classifications for current training chunks
+  predYtr = knn(train = Xtr, test = Xtr, cl = Ytr, k = k)
+  
+  ## get classifications for current test chunk
+  predYvl = knn(train = Xtr, test = Xvl, cl = Ytr, k = k)
+  
+  data.frame(train.error = calc_error_rate(predYtr, Ytr),
+             val.error = calc_error_rate(predYvl, Yvl))
+}
+
+```
+
+```{r}
+set.seed(1)
+
+nfold = 10;
+
+Xdat=spam.train[,1:57]
+Ydat=as.vector(spam.train$y)
+
+kvec = c(1, seq(10, 50, length.out=5))
+
+error.folds = NULL
+
+for (i in kvec){  # Loop through different number of neighbors
+  
+    tmp = ldply(1:nfold, do.chunk, # Apply do.chunk() function to each fold 
+                folddef=folds, Xdat, Ydat, k=i) 
+                
+    tmp$neighbors = i # Record the last number of neighbor
+
+    error.folds = rbind(error.folds, tmp) # combine results 
+
+}
+
+```
+
+```{r}
+
+grouped_means = aggregate(error.folds[, 1:2], list(error.folds$neighbors), mean)
+colnames(grouped_means) = c("neighbors","train.error","val.error")
+
+best.kfold = grouped_means$neighbors[which.min(grouped_means$val.error)]
+
+```
+
+
+2. **(Training and Test Errors)** Now that the best number of neighbors has been
+   determined, compute the training error using `spam.train` and test error using `spam.test` or the $k =$ `best.kfold`.  Use the function `calc_error_rate()` to get the errors from the predicted class labels.  Fill in the first row of `records` with the train and test error from the `knn` fit.
+
+```{r}
+
+knn_train_pred = knn(train = spam.train[1:(ncol(spam.train)-1)], test = spam.train[1:57],
+    cl = spam.train$y, k = best.kfold)
+knn_test_pred = knn(train = spam.train[1:57], test = spam.test[1:57], 
+    cl = spam.train$y, k = best.kfold)
+
+# calculate the training and test error and input values in records matrix for KNN
+records[1] = calc_error_rate(knn_train_pred, spam.train$y)
+records[1,2] = calc_error_rate(knn_test_pred, spam.test$y)
+
+```
+
+-----------------------------------------
+
+## Decision Tree Method
+
+3. **(Controlling Decision Tree Construction)** Function `tree.control`
+   specifies options for tree construction: set `minsize` equal to 5 (the minimum number of observations in each leaf) and `mindev` equal to 1e-5. See the help for `tree.control` for more information.  The output of `tree.control` should be passed into `tree` function in the `control` argument. Construct a decision tree using training set `spam.train`, call the resulting tree `spamtree`.  `summary(spamtree)` gives some basic information about the tree.  How many leaf nodes are there? How many of the training observations are misclassified?  
+
+```{r}
+
+control = tree.control(minsize=5,mindev = 1e-5,
+                       nobs=nrow(spam.train))
+spamtree = tree(y~.,data = spam.train, control = control)
+summary(spamtree)
+
+```
+    There are 184 leaf nodes. 48 of the total 3601 training observations were misclassified resulting in a misclassification error rate of 0.01333
+
+4. **(Decision Tree Pruning)** We can prune a tree using the `prune.tree` function.  Pruning iteratively removes the leaves that have the least effect on the overall misclassification. Prune the tree until there are only $10$ leaf nodes so that we can easily visualize the tree.  Use `draw.tree` function from the `maptree` package to visualize the pruned tree. Set `nodeinfo=TRUE`.
+
+```{r}
+
+pruned_spamtree = prune.tree(tree = spamtree, best = 10)
+
+draw.tree(tree = pruned_spamtree, size = 2, cex = .5, nodeinfo=TRUE)
+
+```
+
+
+   
+5.   In this problem we will use cross validation to prune the tree. Fortunately, the `tree` package provides an easy to use function to do the cross validation for us with the `cv.tree` function.  Use the same fold partitioning you used in the KNN problem (refer to `cv.tree` help page for detail about `rand` argument).  Also be sure to set `method=misclass`.  Plot the misclassification as function of tree size.  Determine the optimal tree size that minimizes misclassification. __Important__: if there are multiple tree sizes that have the same minimum estimated misclassification, you should choose the smallest tree.  This reflects the idea that we want to choose the simplest model that explains the data well ("Occam's razor"). Show the optimal tree size `best.size.cv` in the plot.
+
+```{r}
+# need to use do_chunk() to do this
+cv = cv.tree(spamtree, FUN = prune.misclass, K = 10, rand = folds)
+best.cv = min(cv$size[which(cv$dev == min(cv$dev, na.rm = TRUE))])
+
+cv$size
+
+best.cv
+
+```
+The best size for the tree is 37 leaf nodes
+
+```{r}
+size_df = as_data_frame(cv$size)
+dev_df = as_data_frame(cv$dev)
+tree = c(size = size_df, dev = dev_df)
+tree_df = as_data_frame(tree)
+
+tree_size_plot = ggplot(data = tree_df, aes(x = size.value, y = dev.value)) + 
+  geom_line(color = "blue") + 
+  xlab("Size") + 
+  ylab("Error") + 
+  ggtitle("Error Rate As a Function of Tree Size") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_vline(aes(xintercept=best.cv), linetype='dashed', color = "red") 
+
+tree_size_plot
+```
+
+
+6. **(Training and Test Errors)** 
+
+    We previous pruned the tree to a small tree so that it could be easily visualized.  Now, prune the original tree to size `best.size.cv` and call the new tree `spamtree.pruned`.  Calculate the training error and test error  when `spamtree.pruned` is used for prediction. Use function `calc_error_rate()` to compute  misclassification error. Also, fill in the second row of the matrix   `records` with the training error rate and test error rate.
+
+
+```{r}
+
+spamtree.pruned = prune.tree(tree = spamtree, best = best.cv)
+pruned.predict.train = predict(spamtree.pruned, spam.train, 
+                               type = "class")
+pruned.predict.test = predict(spamtree.pruned, spam.test, 
+                              type = "class")
+traintable = table(pruned.predict.train, spam.train$y)
+testtable = table(pruned.predict.test, spam.test$y)
+
+# calculate the training and test error and input values in records matrix for tree
+records[2,1] = calc_error_rate(pruned.predict.train, spam.train$y)
+records[2,2] = calc_error_rate(pruned.predict.test, spam.test$y)
+
+```
+
+
+----------------------
+
+
+## Logistic regression
+
+
+7. In a binary classification problem, let $p$ represent the probability of class
+   label "1"", which implies $1-p$ represents probability of class label "0".
+   The *logistic function* (also called the "inverse logit") is the cumulative distribution function of logistic
+   distribution, which maps a real number $z$ to the open interval $(0,1)$:
+   \begin{equation} p(z)=\frac{e^z}{1+e^z}. \end{equation} 
+   <!-- It is easy to see -->
+   <!-- that when $z\rightarrow-\infty$, function $p(z) \rightarrow 0$, and as -->
+   <!-- $z\rightarrow\infty$, function $p(z) \rightarrow 1$. -->
+ 
+  a. Show that indeed the inverse of a logistic function is the _logit_ function:
+    \begin{equation} 
+    z(p)=\ln\left(\frac{p}{1-p}\right).
+    \end{equation}
+ 
+   
+    
+  b. The logit function is a commonly used _link function_ for a generalized linear model of binary
+    data.  One reason for this is that implies interpretable coefficients.  Assume that $z=\beta_0 + \beta_1 x_1$, and $p = \text{logistic}(z)$.  How does the odds of the outcome change if you increase $x_1$ by two? Assume $\beta_1$ is negative: what value does $p$ approach as $x_1 \to \infty$? What value does $p$ approach as $x_1 \to -\infty$?
+    
+
+8. Use logistic regression to perform classification. Logistic regression specifically estimates the probability that an observation as a particular class label. We can define a probability threshold for assigning class labels based on the probabilities returned by the `glm` fit. 
+    
+```{r, message=FALSE}
+# run linear regression of the y column on all other columns in spam.train 
+glm.fits=glm(y~., data=spam.train, family =binomial)
+
+
+glm.probs.train = predict(glm.fits, spam.train, type="response")
+glm.probs.test = predict(glm.fits, spam.test, type="response")
+```
+```{r}
+spam.trainY = spam.train$y
+glm.pred.train = rep("good",3601)
+glm.pred.train[glm.probs.train > .5] = "spam"
+table(glm.pred.train, spam.trainY)
+
+
+spam.testY = spam.test$y
+glm.pred.test=rep("good",1000)
+glm.pred.test[glm.probs.test > .5]="spam"
+table(glm.pred.test, spam.testY)
+
+
+# calculate the training and test error and input values in records matrix for logistic regression
+records[3,1] = calc_error_rate(glm.pred.train, spam.trainY)
+records[3,2] = calc_error_rate(glm.pred.test, spam.testY)
+
+kable(records, "latex", booktabs = T, 
+      caption = "Training and Test Error for Different Modeling Approaches", digits = 4) %>%  
+      kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
+```
+    
+    In this problem, we will simply use the "majority rule".  If the probability is larger than 50\% class as spam.  Fit a logistic regression to predict spam given all other features in the dataset using the `glm` function.  Estimate the class labels using the majority rule and calculate the training and test errors.  Add the training and test errors to the third row of `records`.  Print the full `records` matrix.  Which method had the lowest misclassification error on the test set?
+
+
+
+----------------------
+
+## Receiver Operating Characteristic curve
+
+9. (ROC curve) We will construct ROC curves based on the predictions of the _test_ data from the model defined in `spamtree.pruned` and the logistic regression model above. Plot the ROC for the test data for both the decision tree and the logistic regression on the same plot.  Compute the area under the curve for both models (AUC).  Which classification method seems to perform the best by this metric?
+
+    __Hints__: In order to construct the ROC curves one needs to use the vector
+    of predicted probabilities for the test data. The usage of the function
+    `predict()` may be different from model to model. 
+    
+    - For trees the matrix of predicted probabilities (for Good and Spam)
+      will be provided by  using
+    
+```{r, eval=FALSE, indent=indent2}
+predict(tree.model, test.data, type="vector")
+```
+
+    - For logistic regression one needs to predict type `response`    
+    
+```{r, eval = FALSE, indent=indent2}
+predict(glm.obj, test.data, type="response")
+```
+
+```{r, eval=FALSE, indent=indent2}
+pruned.predict.test = predict(spamtree.pruned, spam.test, type = "vector")
+pred.tree <- prediction(pruned.predict.test[,2], spam.testY)
+perf.tree <- performance(pred.tree, "tpr", "fpr")
+plot(perf.tree)
+```
+
+
+```{r}
+logistic.probs.test = predict(glm.fits, spam.test, type="response")
+pred.logistic = prediction(logistic.probs.test, spam.testY)
+perf.logistic <- performance(pred.logistic, "tpr", "fpr")
+plot(perf.logistic)
+
+```
+
+10. In the SPAM example, take "positive" to mean "spam".  If you are the designer of a spam filter, are you more concerned about the potential for false positive rates that are too large or true positive rates that are too small? Argue your case.
+
+    
+--------------------------------------------------------------------------------
+
+
+# **Problems below for 231 students only** 
+
+11. A multivariate normal distribution has density 
+
+$$f(x) = \frac{1}{(2\pi)^{p/2}|\Sigma|^{1/2}}exp\left(-\frac{1}{2}(x-\mu_k)^T\Sigma^{-1}(x-\mu)\right)$$
+
+  In quadratic discriminant analysis with two groups we use Bayes rule to calculate the probability that $Y$ has class label "1":
+
+$$Pr(Y=1 \mid X=x) = \frac{f_1(x)\pi_1}{\pi_1f_1(x) + \pi_2f_2(x)}$$
+    
+  where $\pi_2 = 1 - \pi_1$ is the prior probability of being in group $2$. Suppose we classify $\hat Y= k$ whenever $Pr(Y=k \mid X=x) > \tau$ for some probability threshold $\tau$ and that $f_k$ is a multivariate normal density with covariance $\Sigma_k$ and mean $\mu_k$.  Note that for a vector $x$ of length $p$ and a $p \times p$ symmetric matrix $A$, $x^TAx$ is the _vector quadratic form_ (the multivariate analog of $x^2$). Show that the decision boundary is indeed quadratic by showing that $\hat Y = 1$ if
+
+$$\delta_1(x) - \delta_2(x) > M(\tau)$$
+
+  where 
+
+$$\hat\delta_k(x) = -{1\over 2}(x-\mu_k)^T\Sigma_k^{-1}(x-\mu_k) - {1\over
+2}\log|\Sigma_k| + \log\pi_k$$
+
+
+  and $M(\tau)$ is some function of the probability threshold $\tau$.  What is the decision threshold, M(1/2), corresponding to a probability threshold of 1/2?
+
+
+
+
+
+
+**Algae Classification** 
+
+  Questions 12-13 relate to `algaeBloom` dataset.  Get the dataset `algaeBloom.txt` from the homework archive file, and read it with the following code:
+
+```{r 14-0, warning=FALSE, include=FALSE}
+algae <- read_table2("algaeBloom.txt", col_names=
+                      c('season','size','speed','mxPH','mnO2','Cl','NO3','NH4',
+                        'oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'), 
+                      na="XXXXXXX")
+```
+
+In homework 1 and homework 2, we investigated basic exploratory data analysis for the `algaeBloom` dataset. One of the explaining variables is `a1`, which is a numerical attribute. In homework 2, we conducted linear regression for variable `a1` using other 8 chemical variables and 3 categorical variables. Here, after standardization, we will transform `a1` into a categorical variable with 2 levels: high and low, and conduct classification predictions using those 11 variables (i.e. do not include a2, a3,..., a7).
+
+12. **(Variable Standardization and Discretization)** Improve the normality of the  the numerical attributes by taking the log of all chemical variables. _After_ log transformation, impute missing values using the median method from homework 1.  Note: do not take the log transform of `a1` since it is not a chemical variable.  Transform the variable `a1` into a categorical variable with two levels: high if a1 is greater than 0.5,  and low if a1 is smaller than or equal to 0.5. 
+
+
+```{r}
+algae_log = algae
+
+# start by performing log transform on chemical columns in algae
+algae_log[,4:11] <- log(algae[,4:11])
+
+# use the median of values in each chemical column to impute any missing values in that col.
+algae_log_med <- algae_log %>% 
+  mutate_at(.vars = c('mxPH','mnO2','Cl','NO3','NH4',
+  'oPO4','PO4','Chla'), .funs = funs(ifelse(is.na(.), median(., na.rm = TRUE), .)))
+
+# need to create categorical variables for "high" or "low" depending on if the value of a1 is above or below 0.5
+#algae_log_med$
+
+```
+
+    
+13. **Linear and Quadratic Discriminant Analysis** 
+  
+a. In LDA we assume that $\Sigma_1 = \Sigma_2$.  Use LDA to predict whether `a1` is high or low using the `MASS::lda()` function.  The `CV` argument in the `MASS::lda` function uses Leave-one-out cross validation LOOCV) when estimating the fitted values to avoid overfitting.  Set the `CV` argument to true.  Plot an ROC curve for the fitted values.  
+
+b.  Quadratic discriminant analysis is strictly more flexible than LDA because it is not required that $\Sigma_1 = \Sigma_2$.  In this sense, LDA can be considered a special case of QDA with the covariances constrained to be the same.  Use a quadratic discriminant model to predict the `a1` using the function `MASS::qda`.  Again setting `CV=TRUE` and plot the ROC on the same plot as the LDA ROC.  Compute the area under the ROC (AUC) for each model.  To get the predicted class probabilities look at the value of `posterior` in the `lda` and `qda` objects.  Which model has better performance?  Briefly explain, in terms of the bias-variance tradeoff, why you believe the better model outperforms the worse model?
+
