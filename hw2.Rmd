@@ -377,24 +377,17 @@ kable(records, "latex", booktabs = T,
     - For trees the matrix of predicted probabilities (for Good and Spam)
       will be provided by  using
     
-```{r, eval=FALSE, indent=indent2}
-predict(tree.model, test.data, type="vector")
-```
+
 
     - For logistic regression one needs to predict type `response`    
     
-```{r, eval = FALSE, indent=indent2}
-predict(glm.obj, test.data, type="response")
-```
 
 ```{r, eval=FALSE, indent=indent2}
 pruned.predict.test = predict(spamtree.pruned, spam.test, type = "vector")
 pred.tree <- prediction(pruned.predict.test[,2], spam.testY)
 perf.tree <- performance(pred.tree, "tpr", "fpr")
-```
 
 
-```{r}
 logistic.probs.test = predict(glm.fits, spam.test, type="response")
 pred.logistic = prediction(logistic.probs.test, spam.testY)
 perf.logistic <- performance(pred.logistic, "tpr", "fpr")
@@ -405,14 +398,24 @@ perf.tree@y.name = perf.logistic@y.name= "True Positive Rate"
 # plot the two ROC curves on the same plot
 plot(perf.tree, type = "l", col = "red")
 par(new=TRUE)
-plot(perf.logistic, type="l", col="blue" )
+plot(perf.logistic, type="l", col = "blue")
+legend(0.8, 0.2, legend=c("Tree", "Logistic"), col=c("red", "blue"), lty=1:2, cex=1.5)
+title("ROC", cex = 1.5)
 
 
+# Calculate AUC
+auc.tree = performance(pred.tree, "auc")@y.values
+auc.logistic = performance(pred.logistic, "auc")@y.values
+
+auc.tree
+auc.logistic
 
 ```
+Based on the AUC metric, the logistic method seems to perform better than the tree method because it has an AUC = 0.975 versus 0.967.
 
 10. In the SPAM example, take "positive" to mean "spam".  If you are the designer of a spam filter, are you more concerned about the potential for false positive rates that are too large or true positive rates that are too small? Argue your case.
 
+You would prefer to include SPAM in your mailbox and have recipients self-sort a few emails rather than automatically filtering out good messages. As a result, you are very concerned with a high false positive rate because that would cause an important message to be sent to spam which could cause the recipient to miss the message. It is less concerning to have a small true positive rate because then the individual will just have to do more sorting but they will never miss an important message.
     
 --------------------------------------------------------------------------------
 
@@ -474,6 +477,9 @@ algae_log_med <- algae_log %>%
 # need to create categorical variables for "high" or "low" depending on if the value of a1 is above or below 0.5
 #algae_log_med$
 
+algae_log_final = algae_log_med %>% 
+  mutate(a1 = as.character(ifelse(a1 > 0.5, "high", "low")))
+
 ```
 
     
@@ -481,5 +487,41 @@ algae_log_med <- algae_log %>%
   
 a. In LDA we assume that $\Sigma_1 = \Sigma_2$.  Use LDA to predict whether `a1` is high or low using the `MASS::lda()` function.  The `CV` argument in the `MASS::lda` function uses Leave-one-out cross validation LOOCV) when estimating the fitted values to avoid overfitting.  Set the `CV` argument to true.  Plot an ROC curve for the fitted values.  
 
+```{r}
+library(MASS)
+
+
+algae.lda.fit = lda(a1 ~ ., algae_log_final, CV = TRUE)
+
+algae.lda.pred = prediction(algae.lda.fit[["posterior"]][,2], algae_log_final$a1)
+algae.lda.perf = performance(algae.lda.pred, measure="tpr", x.measure="fpr")
+
+```
+
 b.  Quadratic discriminant analysis is strictly more flexible than LDA because it is not required that $\Sigma_1 = \Sigma_2$.  In this sense, LDA can be considered a special case of QDA with the covariances constrained to be the same.  Use a quadratic discriminant model to predict the `a1` using the function `MASS::qda`.  Again setting `CV=TRUE` and plot the ROC on the same plot as the LDA ROC.  Compute the area under the ROC (AUC) for each model.  To get the predicted class probabilities look at the value of `posterior` in the `lda` and `qda` objects.  Which model has better performance?  Briefly explain, in terms of the bias-variance tradeoff, why you believe the better model outperforms the worse model?
+```{r}
+algae.qda.fit = qda(a1 ~ ., algae_log_final, CV = TRUE)
+
+algae.qda.pred = prediction(algae.qda.fit[["posterior"]][,2], algae_log_final$a1)
+algae.qda.perf = performance(algae.qda.pred, measure="tpr", x.measure="fpr")
+
+# plot the two ROC curves on the same plot
+plot(algae.lda.perf, type = "l", col = "red")
+par(new=TRUE)
+plot(algae.qda.perf, type="l", col = "blue")
+legend(0.8, 0.2, legend=c("LDA", "QDA"), col=c("red", "blue"), lty=1, cex=1.5)
+title("ROC for LDA and QDA of Algae Data", cex = 1.5)
+
+
+# Calculate AUC
+auc.lda = performance(algae.lda.pred, "auc")@y.values
+auc.qda = performance(algae.qda.pred, "auc")@y.values
+
+auc.lda
+auc.qda
+
+```
+
+Based on the AUC analysis, the LDA outperforms QDA with AUC of 0.759 and 0.656 respectively. QDA allows for more flexible modeling of the data set because it assumes quadratic decision boundary rather than a linear boudary. While this reduces bias, it also increases the variance. Additionally in this case, the predictors for both the high and low algae groups have similar correlations, so we don't need the flexibility that QDA offers for situations with different correlations among predictors. As a result, the added variance with QDA analysis comes at a cost with a decrease in true positive rate and an increase in the false positive rate for the QDA case in the figure above. Thus, LDA makes more sense to use in this situation.
+
 
