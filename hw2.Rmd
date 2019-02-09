@@ -391,7 +391,6 @@ predict(glm.obj, test.data, type="response")
 pruned.predict.test = predict(spamtree.pruned, spam.test, type = "vector")
 pred.tree <- prediction(pruned.predict.test[,2], spam.testY)
 perf.tree <- performance(pred.tree, "tpr", "fpr")
-plot(perf.tree)
 ```
 
 
@@ -399,7 +398,16 @@ plot(perf.tree)
 logistic.probs.test = predict(glm.fits, spam.test, type="response")
 pred.logistic = prediction(logistic.probs.test, spam.testY)
 perf.logistic <- performance(pred.logistic, "tpr", "fpr")
-plot(perf.logistic)
+
+perf.tree@x.name = perf.logistic@x.name= "False Positive Rate"
+perf.tree@y.name = perf.logistic@y.name= "True Positive Rate"
+
+# plot the two ROC curves on the same plot
+plot(perf.tree, type = "l", col = "red")
+par(new=TRUE)
+plot(perf.logistic, type="l", col="blue" )
+
+
 
 ```
 
