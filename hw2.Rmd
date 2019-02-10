@@ -355,11 +355,17 @@ table(glm.pred.test, spam.testY)
 records[3,1] = calc_error_rate(glm.pred.train, spam.trainY)
 records[3,2] = calc_error_rate(glm.pred.test, spam.testY)
 
+```
+
+```{r, echo = FALSE}
 kable(records, "latex", booktabs = T, 
       caption = "Training and Test Error for Different Modeling Approaches", digits = 4) %>%  
       kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
 ```
+
     
+The tree method has the lowest test error (7.6%) of all of the methods, followed by logistic (8.1%) and then KNN (9.9%)
+
     In this problem, we will simply use the "majority rule".  If the probability is larger than 50\% class as spam.  Fit a logistic regression to predict spam given all other features in the dataset using the `glm` function.  Estimate the class labels using the majority rule and calculate the training and test errors.  Add the training and test errors to the third row of `records`.  Print the full `records` matrix.  Which method had the lowest misclassification error on the test set?
 
 
@@ -442,10 +448,46 @@ $$\hat\delta_k(x) = -{1\over 2}(x-\mu_k)^T\Sigma_k^{-1}(x-\mu_k) - {1\over
 
   and $M(\tau)$ is some function of the probability threshold $\tau$.  What is the decision threshold, M(1/2), corresponding to a probability threshold of 1/2?
 
+$$
+P ( Y = 1 | X = x ) = \frac { \pi _ { 1 } f _ { 1 } ( x ) } { \pi _ { 1 } f _ { 1 } ( x ) + \pi _ { 2 } f _ { 2 } ( x ) } > \tau
+$$
 
+$$
+\pi _ { 1 } f _ { 1 } ( x ) > \tau \left( \pi f _ { 1 } ( x ) + \pi _ { 2 } f _ { 2 } ( x ) \right)
+$$
+$$
+\pi _ { 1 } f _ { 1 } ( x ) ( 1 - \tau ) > \pi _ { 2 } f _ { 2 } ( x ) \tau
+$$
+$$
+\frac { \pi _ { 1 } f _ { 1 } ( x ) ( 1 - \tau ) } { \pi _ { 2 } f _ { 2 } ( x ) } > \tau
+$$
+$$
+\frac { \pi _ { 1 } f _ { 1 } ( x ) } { \pi _ { 2 } f _ { 2 } ( x ) } > \frac { \tau } { 1 - \tau }
+$$
+$$\frac{\frac{1}{(2\pi)^{p/2}|\Sigma_1|^{1/2}}exp\left(-\frac{1}{2}(x-\mu_1)^T\Sigma_1^{-1}(x-\mu_1)\right)}{\frac{1}{(2\pi)^{p/2}|\Sigma_2|^{1/2}}exp\left(-\frac{1}{2}(x-\mu_2)^T\Sigma_2^{-1}(x-\mu_2)\right)} > \frac { \tau } { 1 - \tau } $$
+$$-\frac{1}{2}(x-\mu_1)^T\Sigma_1^{-1}(x-\mu_1) -\frac{1}{2} \log |\Sigma_1| + \log \pi_1 - (-\frac{1}{2}(x-\mu_2)^T\Sigma_2^{-1}(x-\mu_2) -\frac{1}{2} \log |\Sigma_2| + \log \pi_2 )> \log \left( \frac { \tau } { 1 - \tau } \right) $$
+$$
+\delta _ { 1 } ( x ) - \delta _ { 2 } ( x )> \log \left( \frac { \tau } { 1 - \tau } \right)
+$$
+$$
+Thus, M({ \tau }) = \log \left( \frac { \tau } { 1 - \tau } \right)
+$$
 
+$$
+For, { \tau } =  \frac { 1} {2}
+$$
+$$
+\delta _ { 1 } ( x ) - \delta _ { 2 } ( x )> \log \frac{\left( \frac { 1} { 2} \right)}{1 - \frac { 1} { 2}}
+$$
 
+$$
+\delta _ { 1 } ( x ) - \delta _ { 2 } ( x )> \log (1)
+$$
+$$
+\delta _ { 1 } ( x ) - \delta _ { 2 } ( x )> 0
+$$
 
+Thus the decision boundary for M(1/2) = 0.
 
 **Algae Classification** 
 
