@@ -32,7 +32,6 @@ library(maptree)
 library(ROCR)
 library(randomForest)
 library(kableExtra)
-library(stargazer)
 
 ```
 
@@ -144,6 +143,7 @@ folds = seq.int(nrow(spam.train)) %>%       ## sequential obs ids
 
 1. **(Selecting number of neighbors)** Use 10-fold cross validation to select
    the best number of neighbors `best.kfold` out of six values of $k$ in `kvec = c(1, seq(10, 50, length.out=5))`. Use the folds defined above and use the following `do.chunk` definition in your code. Again put `set.seed(1)` before your code.  What value of $k$ leads to the smallest estimated test error?
+   
 
 ```{r 90,indent=indent1,message=F,warning=F}
 do.chunk <- function(chunkid, folddef, Xdat, Ydat, k){
@@ -202,6 +202,7 @@ best.kfold = grouped_means$neighbors[which.min(grouped_means$val.error)]
 
 ```
 
+The value of kfold was 10 nearest neighbors to reduce the estimated test error of 9.9%
 
 2. **(Training and Test Errors)** Now that the best number of neighbors has been
    determined, compute the training error using `spam.train` and test error using `spam.test` or the $k =$ `best.kfold`.  Use the function `calc_error_rate()` to get the errors from the predicted class labels.  Fill in the first row of `records` with the train and test error from the `knn` fit.
@@ -234,15 +235,16 @@ spamtree = tree(y~.,data = spam.train, control = control)
 summary(spamtree)
 
 ```
-    There are 184 leaf nodes. 48 of the total 3601 training observations were misclassified resulting in a misclassification error rate of 0.01333
+There are 184 leaf nodes. 48 of the total 3601 training observations were misclassified 
+The misclassification error rate was 0.01333
 
 4. **(Decision Tree Pruning)** We can prune a tree using the `prune.tree` function.  Pruning iteratively removes the leaves that have the least effect on the overall misclassification. Prune the tree until there are only $10$ leaf nodes so that we can easily visualize the tree.  Use `draw.tree` function from the `maptree` package to visualize the pruned tree. Set `nodeinfo=TRUE`.
 
 ```{r}
 
-pruned_spamtree = prune.tree(tree = spamtree, best = 10)
+pruned_spamtree = prune.tree(tree = spamtree, best = 10, method = "misclass")
 
-draw.tree(tree = pruned_spamtree, size = 2, cex = .5, nodeinfo=TRUE)
+draw.tree(tree = pruned_spamtree, size = 2, cex = .3, nodeinfo=TRUE)
 
 ```
 
@@ -251,9 +253,10 @@ draw.tree(tree = pruned_spamtree, size = 2, cex = .5, nodeinfo=TRUE)
 5.   In this problem we will use cross validation to prune the tree. Fortunately, the `tree` package provides an easy to use function to do the cross validation for us with the `cv.tree` function.  Use the same fold partitioning you used in the KNN problem (refer to `cv.tree` help page for detail about `rand` argument).  Also be sure to set `method=misclass`.  Plot the misclassification as function of tree size.  Determine the optimal tree size that minimizes misclassification. __Important__: if there are multiple tree sizes that have the same minimum estimated misclassification, you should choose the smallest tree.  This reflects the idea that we want to choose the simplest model that explains the data well ("Occam's razor"). Show the optimal tree size `best.size.cv` in the plot.
 
 ```{r}
-# need to use do_chunk() to do this
+
 cv = cv.tree(spamtree, FUN = prune.misclass, K = 10, rand = folds)
-best.cv = min(cv$size[which(cv$dev == min(cv$dev, na.rm = TRUE))])
+best.cv = min(cv$size[which(cv$dev==min(cv$dev, na.rm = TRUE))])
+  #min(cv$size[which(cv$dev == min(cv$dev, na.rm = TRUE))])
 
 cv$size
 
@@ -274,7 +277,7 @@ tree_size_plot = ggplot(data = tree_df, aes(x = size.value, y = dev.value)) +
   ylab("Error") + 
   ggtitle("Error Rate As a Function of Tree Size") + 
   theme(plot.title = element_text(hjust = 0.5)) +
-  geom_vline(aes(xintercept=best.cv), linetype='dashed', color = "red") 
+  geom_vline(aes(xintercept=best.cv), linetype='dashed', color = "red")
 
 tree_size_plot
 ```
@@ -321,12 +324,69 @@ records[2,2] = calc_error_rate(pruned.predict.test, spam.test$y)
     \begin{equation} 
     z(p)=\ln\left(\frac{p}{1-p}\right).
     \end{equation}
- 
+$$
+p(z)=\frac{e^z}{1+e^z}=p\\
+\begin{aligned}
+    e^z&=p+pe^z\\
+    e^z(1-p)&=p\\
+    e^z&=\frac{p}{1-p}\\
+    z&=ln(\frac{p}{1-p})
+\end{aligned}\\
+z(p)=ln(\frac{p}{1-p})
+$$
    
     
   b. The logit function is a commonly used _link function_ for a generalized linear model of binary
     data.  One reason for this is that implies interpretable coefficients.  Assume that $z=\beta_0 + \beta_1 x_1$, and $p = \text{logistic}(z)$.  How does the odds of the outcome change if you increase $x_1$ by two? Assume $\beta_1$ is negative: what value does $p$ approach as $x_1 \to \infty$? What value does $p$ approach as $x_1 \to -\infty$?
     
+Using $z = \beta_0 + \beta_1 x_1$ and $p = logistic(z)$ from above:
+$$
+\text{odds: } \frac{p}{1-p}\\
+\begin{aligned}
+    \frac{p}{1-p}&=\frac{\frac{e^z}{1+e^z}}{1-\frac{e^z}{1+e^z}}\\
+    &=\frac{\frac{e^z}{1+e^z}}{\frac{1}{1+e^z}}\\
+    &=e^z\\
+\end{aligned}\\
+\Rightarrow \text{odds } = e^{\beta_0} e^{\beta_1 x_1}
+$$
+
+Change of $2x_1 \implies e^{2 \beta_1}$.
+
+$$
+\text{change } = \frac{\text{odds}_{new}}{\text{odds}_{old}}\\
+\begin{aligned}
+    &=\frac{e^{\beta_0} e^{\beta_1 (x_1+2)}}{e^{\beta_0} e^{\beta_1 x_1}}\\
+    &=e^{2 \beta_1}
+\end{aligned}\\
+$$
+
+
+For $\beta_1 < 0$, what does $p$ approach as $x_1 \rightarrow \infty$? We have $p = \frac{e^{\beta_0} e^{\beta_1 x_1}}{1+e^{\beta_0} e^{\beta_1 x_1}}$
+$$
+\begin{aligned}
+    \lim_{x_1\to\infty} p &=\frac{\lim_{x_1\to\infty} e^{\beta_0} e^{\beta_1 x_1}}{1+\lim_{x_1\to\infty} e^{\beta_0} e^{\beta_1 x_1}}\\
+    &= \frac{0}{1+0}\\
+    &= 0\\
+\end{aligned}\\
+$$
+$p$ approaches $0$ as $x_1 \rightarrow \infty$.
+
+For $\beta_1 < 0$, what does $p$ approach as $x_1 \rightarrow -\infty$? We have $p = \frac{e^{\beta_0} e^{\beta_1 x_1}}{1+e^{\beta_0} e^{\beta_1 x_1}}$
+$$
+\begin{aligned}
+    \lim_{x_1\to\infty} p &=\frac{\lim_{x_1\to\infty} e^{\beta_0} e^{\beta_1 x_1}}{\lim_{x_1\to\infty}1+e^{\beta_0} e^{\beta_1 x_1}}\\
+    &= \frac{\infty}{\infty}\\
+\end{aligned}\\
+$$
+Use L'Hospital $\mathop {\lim }\limits_{x \to c} \frac{{f\left( x \right)}}{{g\left( x \right)}} = \mathop {\lim }\limits_{x \to c} \frac{{f'\left( x \right)}}{{g'\left( x \right)}}$:
+$$
+\begin{aligned}
+    \lim_{x_1\to\infty} p &= \lim_{x_1\to\infty}\frac{e^{\beta_0} \beta_1 e^{\beta_1 x_1}}{e^{\beta_0} \beta_1 e^{\beta_1 x_1}}\\
+    &= \lim_{x_1\to\infty} 1\\
+    &= 1\\
+\end{aligned}\\
+$$
+$p$ approaches $1$ as $x_1 \rightarrow -\infty$.
 
 8. Use logistic regression to perform classification. Logistic regression specifically estimates the probability that an observation as a particular class label. We can define a probability threshold for assigning class labels based on the probabilities returned by the `glm` fit. 
     
@@ -338,6 +398,8 @@ glm.fits=glm(y~., data=spam.train, family =binomial)
 glm.probs.train = predict(glm.fits, spam.train, type="response")
 glm.probs.test = predict(glm.fits, spam.test, type="response")
 ```
+
+
 ```{r}
 spam.trainY = spam.train$y
 glm.pred.train = rep("good",3601)
@@ -356,14 +418,13 @@ records[3,1] = calc_error_rate(glm.pred.train, spam.trainY)
 records[3,2] = calc_error_rate(glm.pred.test, spam.testY)
 
 ```
-
+    
 ```{r, echo = FALSE}
 kable(records, "latex", booktabs = T, 
       caption = "Training and Test Error for Different Modeling Approaches", digits = 4) %>%  
       kable_styling(bootstrap_options = "striped", full_width = F, position = "center")
 ```
 
-    
 The tree method has the lowest test error (7.6%) of all of the methods, followed by logistic (8.1%) and then KNN (9.9%)
 
     In this problem, we will simply use the "majority rule".  If the probability is larger than 50\% class as spam.  Fit a logistic regression to predict spam given all other features in the dataset using the `glm` function.  Estimate the class labels using the majority rule and calculate the training and test errors.  Add the training and test errors to the third row of `records`.  Print the full `records` matrix.  Which method had the lowest misclassification error on the test set?
@@ -405,8 +466,9 @@ perf.tree@y.name = perf.logistic@y.name= "True Positive Rate"
 plot(perf.tree, type = "l", col = "red")
 par(new=TRUE)
 plot(perf.logistic, type="l", col = "blue")
-legend(0.8, 0.2, legend=c("Tree", "Logistic"), col=c("red", "blue"), lty=1:2, cex=1.5)
-title("ROC", cex = 1.5)
+
+legend("bottomright", legend=c("Tree", "Logistic"), col=c("red", "blue"), lty=1:2, cex=1.5)
+title("ROC for Tree and Logistic Classifications", cex = 1.5)
 
 
 # Calculate AUC
@@ -448,6 +510,8 @@ $$\hat\delta_k(x) = -{1\over 2}(x-\mu_k)^T\Sigma_k^{-1}(x-\mu_k) - {1\over
 
   and $M(\tau)$ is some function of the probability threshold $\tau$.  What is the decision threshold, M(1/2), corresponding to a probability threshold of 1/2?
 
+
+
 $$
 P ( Y = 1 | X = x ) = \frac { \pi _ { 1 } f _ { 1 } ( x ) } { \pi _ { 1 } f _ { 1 } ( x ) + \pi _ { 2 } f _ { 2 } ( x ) } > \tau
 $$
@@ -488,6 +552,7 @@ $$
 $$
 
 Thus the decision boundary for M(1/2) = 0.
+
 
 **Algae Classification** 
 
@@ -551,7 +616,7 @@ algae.qda.perf = performance(algae.qda.pred, measure="tpr", x.measure="fpr")
 plot(algae.lda.perf, type = "l", col = "red")
 par(new=TRUE)
 plot(algae.qda.perf, type="l", col = "blue")
-legend(0.8, 0.2, legend=c("LDA", "QDA"), col=c("red", "blue"), lty=1, cex=1.5)
+legend(0.6, 0.3, legend=c("LDA", "QDA"), col=c("red", "blue"), lty=1, cex=1.5)
 title("ROC for LDA and QDA of Algae Data", cex = 1.5)
 
 
