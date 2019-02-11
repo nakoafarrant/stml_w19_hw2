@@ -449,7 +449,7 @@ The tree method has the lowest test error (7.6%) of all of the methods, followed
     - For logistic regression one needs to predict type `response`    
     
 
-```{r, eval=FALSE, indent=indent2}
+```{r, indent=indent2}
 pruned.predict.test = predict(spamtree.pruned, spam.test, type = "vector")
 pred.tree <- prediction(pruned.predict.test[,2], spam.testY)
 perf.tree <- performance(pred.tree, "tpr", "fpr")
